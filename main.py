@@ -6,7 +6,7 @@ import mariadb
 import pandas as pd
 from datetime import date
 
-st.set_page_config(page_title="PLAbDab", page_icon="🔒", layout="wide")
+st.set_page_config(page_title="PLAbDab", page_icon="🔒")
 
 # --- DATABASE CONNECTION ---
 @st.cache_resource
@@ -42,6 +42,7 @@ if st.session_state["authentication_status"] is False:
 elif st.session_state["authentication_status"] is None:
     st.warning('Please enter your username and password')
 elif st.session_state["authentication_status"]:
+    st.set_page_config(page_title="PLAbDab", page_icon="🧬")
     st.sidebar.title(f'Welcome *{st.session_state["name"]}*')
     st.sidebar.write(f'Username: `{st.session_state["username"]}`') 
     authenticator.logout('Logout', 'sidebar')
