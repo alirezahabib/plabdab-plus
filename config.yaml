@@ -1,0 +1,10 @@
+cookie:
+  expiry_days: 30
+  key: plabdab_secret_key
+  name: plabdab_cookie
+credentials:
+  usernames:
+    hasan:
+      email: user@example.com
+      name: Hasan Alikhani
+      password: $2b$12$QbzZ6RH3wsSoecM1Iew7t.FtA6uc7X9Mu3c7WnKmK.uDcQSOMff1a
