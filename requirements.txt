@@ -1,2 +1,4 @@
 streamlit
 mariadb
+streamlit-authenticator
+pyyaml
