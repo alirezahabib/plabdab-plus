@@ -6,7 +6,9 @@ import mariadb
 import pandas as pd
 from datetime import date
 
-st.set_page_config(page_title="PLAbDab", page_icon="🔒")
+st.set_page_config(page_title="PLAbDab", page_icon="🧬")
+st.title('🧬 PLAbDab Database')
+st.info('The Patent and Literature Antibody Database')
 
 # --- DATABASE CONNECTION ---
 @st.cache_resource
@@ -42,12 +44,9 @@ if st.session_state["authentication_status"] is False:
 elif st.session_state["authentication_status"] is None:
     st.warning('Please enter your username and password')
 elif st.session_state["authentication_status"]:
-    st.set_page_config(page_title="PLAbDab", page_icon="🧬")
     st.sidebar.title(f'Welcome *{st.session_state["name"]}*')
     st.sidebar.write(f'Username: `{st.session_state["username"]}`') 
     authenticator.logout('Logout', 'sidebar')
-    st.sidebar.header('PLAbDab')
-    st.sidebar.info('The Patent and Literature Antibody Database')
     st.sidebar.markdown('---')
     st.sidebar.subheader('Project Info')
     st.sidebar.markdown('**Author:** Alireza Habibzadeh')
@@ -78,7 +77,6 @@ elif st.session_state["authentication_status"]:
         except Exception as e:
             st.error(e)
 
-    st.title('PLAbDab Database Search')
 
     conn = get_db_connection()
     if conn:
