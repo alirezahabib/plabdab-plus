@@ -106,8 +106,6 @@ cython_debug/
 
 # Docker
 *.log
-docker-compose*.yml
-docker-compose*.yaml
 
 # VS Code
 .vscode/
