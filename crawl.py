@@ -126,7 +126,7 @@ def main():
                 flags = ["ncbi"]
                 if got_pubmed:
                     flags.append("pubmed")
-                df.at[idx, "crawl"] = ",".join(flags)
+                df.at[idx, "crawl"] = ";".join(flags)
 
                 success_count += 1
                 if success_count % 1000 == 0:
@@ -135,7 +135,6 @@ def main():
 
             except Exception as e:
                 print(f"ERROR fetching {prot_id} ({key}): {e}")
-            break
 
     # Final save
     df.to_csv(args.csv, index=False)
