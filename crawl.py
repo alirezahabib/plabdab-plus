@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import json
 import time
 import argparse
@@ -13,12 +14,30 @@ OUTDIR      = "data"
 BASE_LIMIT  = 0.34    # ~3 req/sec without an API key
 API_LIMIT   = 0.1     # ~10 req/sec with an API key
 
+# pre-compile a regex that matches any control char except newline, carriage return, tab
+_CTRLS = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]')
+
+def _sanitize(raw_text: str) -> str:
+    """Strip out unprintable control chars that break json.loads."""
+    return _CTRLS.sub('', raw_text)
+
 def fetch_json(func, **kwargs):
+    """
+    Call an Entrez JSON endpoint, sanitize out bad chars, parse, close, rate-limit.
+    Falls back to a second sanitization pass if needed.
+    """
     handle = func(**kwargs)
-    obj = json.load(handle)
+    raw = handle.read()
     handle.close()
     time.sleep(fetch_json.delay)
-    return obj
+
+    try:
+        # first try strict=False
+        return json.loads(raw, strict=False)
+    except json.JSONDecodeError:
+        # second, strip out any remaining control chars
+        cleaned = _sanitize(raw)
+        return json.loads(cleaned, strict=False)
 
 def fetch_text(func, **kwargs):
     handle = func(**kwargs)
