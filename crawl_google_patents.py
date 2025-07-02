@@ -88,8 +88,7 @@ def crawl_google_patents():
                 df.to_csv(csv_file_path, index=False)
                 logging.info("CSV saved.")
 
-            break
-            time.sleep(0.2)
+            time.sleep(0.1)
 
         except requests.exceptions.RequestException as e:
             logging.error(f"Error downloading {row.get('url', 'N/A')} for num: {row.get('num', 'N/A')}, ID: {row.get('ID', 'N/A')}. Error: {e}")
