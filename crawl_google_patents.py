@@ -61,7 +61,7 @@ def crawl_google_patents():
             num = row['num']
             url = row['url']
             
-            logging.info(f"Crawling row num: {num}, url: {url}")
+            # logging.info(f"Crawling row num: {num}, url: {url}")
 
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -81,14 +81,15 @@ def crawl_google_patents():
             
             crawled_count += 1
             
-            logging.info(f"Successfully crawled and saved {file_path}")
+            # logging.info(f"Successfully crawled and saved {file_path}")
 
             if crawled_count > 0 and crawled_count % 500 == 0:
                 logging.info(f"Crawled {crawled_count} rows, saving CSV...")
                 df.to_csv(csv_file_path, index=False)
                 logging.info("CSV saved.")
 
-            time.sleep(1)
+            break
+            time.sleep(0.2)
 
         except requests.exceptions.RequestException as e:
             logging.error(f"Error downloading {row.get('url', 'N/A')} for num: {row.get('num', 'N/A')}, ID: {row.get('ID', 'N/A')}. Error: {e}")
