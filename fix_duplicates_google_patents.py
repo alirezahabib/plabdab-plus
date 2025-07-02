@@ -33,7 +33,14 @@ from typing import Set
 DATA_CSV_PATH = Path("data.csv")
 SRC_DIR = Path("data_google_patents")
 DEST_DIR = SRC_DIR / "patents"
-MAX_ROWS = 1000  # Process num from 0 to 999 inclusive
+
+# Process rows whose `num` is between START_NUM and END_NUM (inclusive).
+START_NUM = 1000
+END_NUM = 1999
+
+# We will read slightly beyond END_NUM for safety, but later filter precisely.
+MAX_ROWS = END_NUM + 1  # 2000 rows
+
 PATENT_URL_PREFIX = "https://patents.google.com"
 CRAWL_KEYWORD = "google_patents"
 
@@ -87,6 +94,16 @@ def main() -> None:
         url = (row.get("url") or "").strip()
         crawl_val = (row.get("crawl") or "").strip()
         num = (row.get("num") or "").strip()
+
+        # Validate numeric range
+        try:
+            num_int = int(num)
+        except ValueError:
+            print(f"Warning: Non-integer num '{num}' encountered: skipping row")
+            continue
+
+        if num_int < START_NUM or num_int > END_NUM:
+            continue  # Outside desired range
 
         # Filter rows of interest
         if not (url.startswith(PATENT_URL_PREFIX) and CRAWL_KEYWORD in crawl_val):
