@@ -20,6 +20,7 @@ Run:  python fix_duplicates_google_patents.py
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 import re
@@ -34,16 +35,6 @@ DATA_CSV_PATH = Path("data.csv")
 SRC_DIR = Path("data_google_patents")
 DEST_DIR = SRC_DIR / "patents"
 
-# Process rows whose `num` is between START_NUM and END_NUM (inclusive).
-START_NUM = 1000
-END_NUM = 1999
-
-# We will read slightly beyond END_NUM for safety, but later filter precisely.
-MAX_ROWS = END_NUM + 1  # 2000 rows
-
-PATENT_URL_PREFIX = "https://patents.google.com"
-CRAWL_KEYWORD = "google_patents"
-
 # Regular expression to extract the patent ID between "/patent/" and the next slash
 PATENT_ID_RE = re.compile(r"/patent/([^/]+)/")
 
@@ -54,13 +45,13 @@ def extract_patent_id(url: str) -> str | None:
     return match.group(1) if match else None
 
 
-def load_rows(csv_path: Path, limit: int) -> list[dict[str, str]]:
-    """Read CSV into a list of dictionaries up to *limit* rows."""
+def load_rows(csv_path: Path, limit: int | None = None) -> list[dict[str, str]]:
+    """Read CSV into a list of dictionaries. If *limit* is provided, stop after that many rows."""
     with csv_path.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = []
         for i, row in enumerate(reader):
-            if i >= limit:
+            if limit is not None and i >= limit:
                 break
             rows.append(row)
         return rows
@@ -85,14 +76,23 @@ def main() -> None:
     # Ensure destination directory exists
     DEST_DIR.mkdir(parents=True, exist_ok=True)
 
+    parser = argparse.ArgumentParser(description="Organise Google Patent HTML files")
+    parser.add_argument("start", type=int, help="Starting num (inclusive)")
+    parser.add_argument("end", type=int, help="Ending num (inclusive)")
+    args = parser.parse_args()
+
+    start_num, end_num = args.start, args.end
+    if start_num > end_num:
+        parser.error("start must be <= end")
+
     existing_patent_ids = gather_existing_patent_ids(DEST_DIR)
     processed_patent_ids: Set[str] = set()
 
-    rows = load_rows(DATA_CSV_PATH, MAX_ROWS)
+    # Read full CSV; we will filter by num values.
+    rows = load_rows(DATA_CSV_PATH)
 
     for row in rows:
         url = (row.get("url") or "").strip()
-        crawl_val = (row.get("crawl") or "").strip()
         num = (row.get("num") or "").strip()
 
         # Validate numeric range
@@ -102,11 +102,11 @@ def main() -> None:
             print(f"Warning: Non-integer num '{num}' encountered: skipping row")
             continue
 
-        if num_int < START_NUM or num_int > END_NUM:
+        if num_int < start_num or num_int > end_num:
             continue  # Outside desired range
 
         # Filter rows of interest
-        if not (url.startswith(PATENT_URL_PREFIX) and CRAWL_KEYWORD in crawl_val):
+        if not url.startswith("https://patents.google.com"):
             continue
 
         patent_id = extract_patent_id(url)
