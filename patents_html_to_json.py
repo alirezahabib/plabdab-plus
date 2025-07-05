@@ -1,6 +1,8 @@
 import os
 import json
 from bs4 import BeautifulSoup
+import concurrent.futures
+import time
 
 def parse_patent_html(html_content):
     """
@@ -15,16 +17,15 @@ def parse_patent_html(html_content):
     soup = BeautifulSoup(html_content, 'lxml')
     patent_data = {}
 
-    # --- Extract Title ---
+    # --- Extract and Clean Title ---
     title_tag = soup.find('h1', itemprop='pageTitle')
+    if not title_tag:
+        title_tag = soup.find('span', itemprop='title')
+
     if title_tag:
-        patent_data['title'] = title_tag.text.strip()
-    else:
-         title_tag = soup.find('span', itemprop='title')
-         if title_tag:
-              patent_data['title'] = title_tag.text.strip()
-
-
+        full_title = title_tag.text.strip()
+        patent_data['title'] = full_title.split('\n')[0].strip()
+    
     # --- Extract Abstract ---
     abstract_section = soup.find('section', itemprop='abstract')
     if abstract_section:
@@ -39,7 +40,8 @@ def parse_patent_html(html_content):
 
     # --- Extract Inventors ---
     inventors = [inventor.text.strip() for inventor in soup.find_all('dd', itemprop='inventor')]
-    patent_data['inventors'] = inventors
+    if inventors:
+        patent_data['inventors'] = inventors
 
     # --- Extract Assignee ---
     assignee_tag = soup.find('dd', itemprop='assigneeCurrent')
@@ -49,18 +51,19 @@ def parse_patent_html(html_content):
     # --- Extract Dates ---
     dates = {}
     priority_date_tag = soup.find('time', itemprop='priorityDate')
-    if priority_date_tag:
+    if priority_date_tag and priority_date_tag.has_attr('datetime'):
         dates['priority_date'] = priority_date_tag['datetime']
 
     filing_date_tag = soup.find('time', itemprop='filingDate')
-    if filing_date_tag:
+    if filing_date_tag and filing_date_tag.has_attr('datetime'):
         dates['filing_date'] = filing_date_tag['datetime']
 
     publication_date_tag = soup.find('time', itemprop='publicationDate')
-    if publication_date_tag:
+    if publication_date_tag and publication_date_tag.has_attr('datetime'):
         dates['publication_date'] = publication_date_tag['datetime']
-    patent_data['dates'] = dates
-
+    
+    if dates:
+        patent_data['dates'] = dates
 
     # --- Extract Claims ---
     claims_section = soup.find('section', itemprop='claims')
@@ -69,7 +72,8 @@ def parse_patent_html(html_content):
         for claim_div in claims_section.find_all('div', class_='claim'):
             claim_text = claim_div.get_text(separator=' ', strip=True)
             claims.append(claim_text)
-        patent_data['claims'] = claims
+        if claims:
+            patent_data['claims'] = claims
 
     # --- Extract Description ---
     description_section = soup.find('section', itemprop='description')
@@ -78,12 +82,46 @@ def parse_patent_html(html_content):
         if description_content:
             patent_data['description'] = description_content.get_text(separator='\n', strip=True)
 
-
     return patent_data
 
-def convert_html_to_json(patents_dir, patents_json_dir):
+def process_file(html_filepath, json_output_dir):
     """
-    Converts all HTML patent files in a directory to JSON format.
+    Reads a single HTML file, parses it, and writes the JSON output.
+    Includes error handling for individual file processing.
+
+    Args:
+        html_filepath (str): The full path to the input HTML file.
+        json_output_dir (str): The directory to save the output JSON file.
+    
+    Returns:
+        str: The path of the file processed, or None if an error occurred.
+    """
+    try:
+        json_filename = os.path.splitext(os.path.basename(html_filepath))[0] + ".json"
+        json_filepath = os.path.join(json_output_dir, json_filename)
+
+        with open(html_filepath, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+
+        patent_data = parse_patent_html(html_content)
+
+        # If parsing results in no data, it might be a corrupted file.
+        if not patent_data:
+            print(f"Warning: No data extracted from {html_filepath}. It may be empty or malformed. Skipping.")
+            return None
+
+        with open(json_filepath, 'w', encoding='utf-8') as f:
+            json.dump(patent_data, f, indent=4, ensure_ascii=False)
+        
+        return html_filepath
+    except Exception as e:
+        # This will catch errors during file reading or parsing (e.g., from BeautifulSoup)
+        print(f"Error processing {html_filepath} due to potential corruption: {e}. Skipping.")
+        return None
+
+def convert_html_to_json_parallel(patents_dir, patents_json_dir):
+    """
+    Converts all HTML patent files in a directory to JSON format using multithreading.
 
     Args:
         patents_dir (str): The directory containing the HTML patent files.
@@ -93,39 +131,43 @@ def convert_html_to_json(patents_dir, patents_json_dir):
         os.makedirs(patents_json_dir)
         print(f"Created directory: {patents_json_dir}")
 
-    for filename in os.listdir(patents_dir):
-        if filename.endswith(".html"):
-            html_filepath = os.path.join(patents_dir, filename)
-            json_filename = os.path.splitext(filename)[0] + ".json"
-            json_filepath = os.path.join(patents_json_dir, json_filename)
+    html_files = [os.path.join(patents_dir, f) for f in os.listdir(patents_dir) if f.endswith(".html")]
+    
+    if not html_files:
+        print(f"No HTML files found in {patents_dir}.")
+        return
 
-            print(f"Processing {html_filepath}...")
+    start_time = time.time()
+    
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_file, filepath, patents_json_dir) for filepath in html_files]
+        
+        processed_count = 0
+        error_count = 0
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if result:
+                processed_count += 1
+            else:
+                error_count += 1
 
-            with open(html_filepath, 'r', encoding='utf-8') as f:
-                html_content = f.read()
+    end_time = time.time()
+    print(f"\n--- Conversion Complete ---")
+    print(f"Successfully processed: {processed_count}/{len(html_files)} files")
+    print(f"Skipped due to errors: {error_count}")
+    print(f"Total time: {end_time - start_time:.2f} seconds.")
 
-            patent_data = parse_patent_html(html_content)
-
-            with open(json_filepath, 'w', encoding='utf-8') as f:
-                json.dump(patent_data, f, indent=4, ensure_ascii=False)
-
-            # print(f"Successfully converted to {json_filepath}")
 
 if __name__ == '__main__':
-    # Define the input and output directories
     patents_directory = './data_google_patents/patents'
     json_output_directory = './data_google_patents/patents_json'
 
-    # Create the input directory and a dummy file for testing if they don't exist
     if not os.path.exists(patents_directory):
         os.makedirs(patents_directory)
         dummy_html_path = os.path.join(patents_directory, 'US10597465.html')
         if not os.path.exists(dummy_html_path):
-             # NOTE: You should replace this with the actual content of your HTML file.
-             # This is a placeholder to make the script runnable.
             with open(dummy_html_path, 'w', encoding='utf-8') as f:
-                f.write('<html><head><title>US10597465B2 - Methods for the generation of multispecific and multivalent antibodies - Google Patents</title></head><body><section itemprop="abstract"><div itemprop="content">The invention provides novel bispecific monoclonal antibodies...</div></section></body></html>')
+                f.write('<html><head><title>US10597465B2 - Methods for the generation of multispecific and multivalent antibodies \n - Google Patents</title></head><body><section itemprop="abstract"><div itemprop="content">The invention provides novel bispecific monoclonal antibodies...</div></section></body></html>')
             print(f"Created a dummy file for testing: {dummy_html_path}")
 
-
-    convert_html_to_json(patents_directory, json_output_directory)
+    convert_html_to_json_parallel(patents_directory, json_output_directory)
