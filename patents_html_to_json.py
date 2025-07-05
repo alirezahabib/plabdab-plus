@@ -97,6 +97,7 @@ def process_file(html_filepath, json_output_dir):
         str: The path of the file processed, or None if an error occurred.
     """
     try:
+        print(f"Processing {html_filepath}")
         json_filename = os.path.splitext(os.path.basename(html_filepath))[0] + ".json"
         json_filepath = os.path.join(json_output_dir, json_filename)
 
