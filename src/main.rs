@@ -1,6 +1,7 @@
 use glob::glob;
 use scraper::{Html, Selector};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use tokio::task;
@@ -19,22 +20,16 @@ struct PatentDates {
 struct Patent {
     title: String,
     publication_number: String,
+    #[serde(rename = "abstract")] // Rename the field in the JSON output
     abstract_text: String,
     inventors: Vec<String>,
     assignees: Vec<String>,
     dates: PatentDates,
-    description: String,
+    description: HashMap<String, String>,
     claims: Vec<String>,
 }
 
 /// A helper function to extract the text content from the first element matching a selector.
-///
-/// # Arguments
-/// * `document` - A reference to the parsed HTML document.
-/// * `selector_str` - The CSS selector to match.
-///
-/// # Returns
-/// * `String` - The trimmed text content, or an empty string if not found.
 fn extract_text(document: &Html, selector_str: &str) -> String {
     let selector = Selector::parse(selector_str).expect("Failed to parse selector");
     document
@@ -44,14 +39,6 @@ fn extract_text(document: &Html, selector_str: &str) -> String {
 }
 
 /// A helper function to extract an attribute from the first element matching a selector.
-///
-/// # Arguments
-/// * `document` - A reference to the parsed HTML document.
-/// * `selector_str` - The CSS selector to match.
-/// * `attr` - The name of the attribute to extract.
-///
-/// # Returns
-/// * `String` - The attribute value, or an empty string if not found.
 fn extract_attribute(document: &Html, selector_str: &str, attr: &str) -> String {
     let selector = Selector::parse(selector_str).expect("Failed to parse selector");
     document
@@ -62,13 +49,6 @@ fn extract_attribute(document: &Html, selector_str: &str, attr: &str) -> String 
 }
 
 /// A helper function to extract all text content from elements matching a selector.
-///
-/// # Arguments
-/// * `document` - A reference to the parsed HTML document.
-/// * `selector_str` - The CSS selector to match.
-///
-/// # Returns
-/// * `Vec<String>` - A vector of trimmed text content for each matched element.
 fn extract_all_text(document: &Html, selector_str: &str) -> Vec<String> {
     let selector = Selector::parse(selector_str).expect("Failed to parse selector");
     document
@@ -78,14 +58,6 @@ fn extract_all_text(document: &Html, selector_str: &str) -> Vec<String> {
 }
 
 /// Parses an HTML document and extracts detailed patent information.
-///
-/// # Arguments
-///
-/// * `html_content` - A string slice that holds the HTML content of the patent page.
-///
-/// # Returns
-///
-/// * `Result<Patent, Box<dyn std::error::Error>>` - A `Result` containing the parsed `Patent` struct or an error.
 fn parse_patent_html(html_content: &str) -> Result<Patent, Box<dyn std::error::Error>> {
     let document = Html::parse_document(html_content);
 
@@ -108,30 +80,43 @@ fn parse_patent_html(html_content: &str) -> Result<Patent, Box<dyn std::error::E
         priority_date,
     };
 
-    // --- Full Description ---
-    // The description consists of multiple headings and paragraphs. We select all of them
-    // and join them together with newlines to preserve some structure.
+    // --- Full Description (as a map of heading -> text) ---
+    let mut description = HashMap::new();
     let description_selector = Selector::parse("section[itemprop='description'] .description > *").unwrap();
-    let description_parts: Vec<String> = document
-        .select(&description_selector)
-        .map(|element| {
-            let text = element.text().collect::<String>().trim().to_string();
-            // Add extra newlines after headings for better readability in the JSON output.
-            if element.value().name() == "heading" {
-                format!("\n\n{}\n", text)
-            } else {
-                text
+
+    let mut current_heading: Option<String> = None;
+    let mut current_text_parts: Vec<String> = Vec::new();
+
+    for element in document.select(&description_selector) {
+        let element_name = element.value().name();
+        if element_name == "heading" {
+            // If we have a pending heading and its text, save it before starting the new one.
+            if let Some(heading) = current_heading.take() {
+                if !current_text_parts.is_empty() {
+                    description.insert(heading, current_text_parts.join("\n\n"));
+                    current_text_parts.clear();
+                }
             }
-        })
-        .collect();
-    let description = description_parts.join("\n\n");
+            // Set the new heading.
+            current_heading = Some(element.text().collect::<String>().trim().to_string());
+        } else {
+            // It's a paragraph or other content under the current heading.
+            let text = element.text().collect::<String>().trim().to_string();
+            if !text.is_empty() {
+                current_text_parts.push(text);
+            }
+        }
+    }
+
+    // Add the last collected section after the loop finishes.
+    if let Some(heading) = current_heading {
+        if !current_text_parts.is_empty() {
+            description.insert(heading, current_text_parts.join("\n\n"));
+        }
+    }
 
     // --- Claims ---
-    let claim_selector = Selector::parse("div.claim-text").unwrap();
-    let claims: Vec<String> = document
-        .select(&claim_selector)
-        .map(|e| e.text().collect::<String>().trim().to_string())
-        .collect();
+    let claims = extract_all_text(&document, "div.claim-text");
 
     Ok(Patent {
         title,
