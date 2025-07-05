@@ -5,19 +5,79 @@ use std::fs;
 use std::path::Path;
 use tokio::task;
 
+/// Represents the key dates associated with a patent.
+#[derive(Serialize, Debug)]
+struct PatentDates {
+    filing_date: String,
+    publication_date: String,
+    priority_date: String,
+}
+
 /// Represents the structure of a patent document.
 /// This struct will be serialized into JSON format.
 #[derive(Serialize, Debug)]
 struct Patent {
     title: String,
-    abstract_text: String,
     publication_number: String,
+    abstract_text: String,
     inventors: Vec<String>,
     assignees: Vec<String>,
+    dates: PatentDates,
+    description: String,
     claims: Vec<String>,
 }
 
-/// Parses an HTML document and extracts patent information.
+/// A helper function to extract the text content from the first element matching a selector.
+///
+/// # Arguments
+/// * `document` - A reference to the parsed HTML document.
+/// * `selector_str` - The CSS selector to match.
+///
+/// # Returns
+/// * `String` - The trimmed text content, or an empty string if not found.
+fn extract_text(document: &Html, selector_str: &str) -> String {
+    let selector = Selector::parse(selector_str).expect("Failed to parse selector");
+    document
+        .select(&selector)
+        .next()
+        .map_or(String::new(), |e| e.text().collect::<String>().trim().to_string())
+}
+
+/// A helper function to extract an attribute from the first element matching a selector.
+///
+/// # Arguments
+/// * `document` - A reference to the parsed HTML document.
+/// * `selector_str` - The CSS selector to match.
+/// * `attr` - The name of the attribute to extract.
+///
+/// # Returns
+/// * `String` - The attribute value, or an empty string if not found.
+fn extract_attribute(document: &Html, selector_str: &str, attr: &str) -> String {
+    let selector = Selector::parse(selector_str).expect("Failed to parse selector");
+    document
+        .select(&selector)
+        .next()
+        .and_then(|e| e.value().attr(attr))
+        .map_or(String::new(), |s| s.to_string())
+}
+
+/// A helper function to extract all text content from elements matching a selector.
+///
+/// # Arguments
+/// * `document` - A reference to the parsed HTML document.
+/// * `selector_str` - The CSS selector to match.
+///
+/// # Returns
+/// * `Vec<String>` - A vector of trimmed text content for each matched element.
+fn extract_all_text(document: &Html, selector_str: &str) -> Vec<String> {
+    let selector = Selector::parse(selector_str).expect("Failed to parse selector");
+    document
+        .select(&selector)
+        .map(|e| e.text().collect::<String>().trim().to_string())
+        .collect()
+}
+
+/// Parses an HTML document and extracts detailed patent information.
 ///
 /// # Arguments
 ///
@@ -29,42 +89,44 @@ struct Patent {
 fn parse_patent_html(html_content: &str) -> Result<Patent, Box<dyn std::error::Error>> {
     let document = Html::parse_document(html_content);
 
-    // Selector for the patent title
-    let title_selector = Selector::parse("span[itemprop='title']").unwrap();
-    let title = document
-        .select(&title_selector)
-        .next()
-        .map_or(String::new(), |e| e.text().collect::<String>().trim().to_string());
+    // --- Basic Information ---
+    let title = extract_text(&document, "span[itemprop='title']");
+    let abstract_text = extract_text(&document, "div.abstract");
+    let publication_number = extract_text(&document, "dd[itemprop='publicationNumber']");
 
-    // Selector for the abstract
-    let abstract_selector = Selector::parse("div.abstract").unwrap();
-    let abstract_text = document
-        .select(&abstract_selector)
-        .next()
-        .map_or(String::new(), |e| e.text().collect::<String>().trim().to_string());
+    // --- People & Companies ---
+    let inventors = extract_all_text(&document, "dd[itemprop='inventor']");
+    let assignees = extract_all_text(&document, "dd[itemprop='assigneeCurrent']");
 
-    // Selector for the publication number
-    let publication_number_selector = Selector::parse("dd[itemprop='publicationNumber']").unwrap();
-    let publication_number = document
-        .select(&publication_number_selector)
-        .next()
-        .map_or(String::new(), |e| e.text().collect::<String>().trim().to_string());
+    // --- Dates ---
+    let filing_date = extract_attribute(&document, "time[itemprop='filingDate']", "datetime");
+    let publication_date = extract_attribute(&document, "time[itemprop='publicationDate']", "datetime");
+    let priority_date = extract_attribute(&document, "time[itemprop='priorityDate']", "datetime");
+    let dates = PatentDates {
+        filing_date,
+        publication_date,
+        priority_date,
+    };
 
-    // Selector for inventors
-    let inventor_selector = Selector::parse("dd[itemprop='inventor']").unwrap();
-    let inventors: Vec<String> = document
-        .select(&inventor_selector)
-        .map(|e| e.text().collect::<String>().trim().to_string())
+    // --- Full Description ---
+    // The description consists of multiple headings and paragraphs. We select all of them
+    // and join them together with newlines to preserve some structure.
+    let description_selector = Selector::parse("section[itemprop='description'] .description > *").unwrap();
+    let description_parts: Vec<String> = document
+        .select(&description_selector)
+        .map(|element| {
+            let text = element.text().collect::<String>().trim().to_string();
+            // Add extra newlines after headings for better readability in the JSON output.
+            if element.value().name() == "heading" {
+                format!("\n\n{}\n", text)
+            } else {
+                text
+            }
+        })
         .collect();
+    let description = description_parts.join("\n\n");
 
-    // Selector for assignees
-    let assignee_selector = Selector::parse("dd[itemprop='assigneeCurrent']").unwrap();
-    let assignees: Vec<String> = document
-        .select(&assignee_selector)
-        .map(|e| e.text().collect::<String>().trim().to_string())
-        .collect();
-
-    // Selector for claims
+    // --- Claims ---
     let claim_selector = Selector::parse("div.claim-text").unwrap();
     let claims: Vec<String> = document
         .select(&claim_selector)
@@ -73,10 +135,12 @@ fn parse_patent_html(html_content: &str) -> Result<Patent, Box<dyn std::error::E
 
     Ok(Patent {
         title,
-        abstract_text,
         publication_number,
+        abstract_text,
         inventors,
         assignees,
+        dates,
+        description,
         claims,
     })
 }
