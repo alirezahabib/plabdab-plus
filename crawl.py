@@ -12,7 +12,7 @@ from Bio import Entrez
 DATA_CSV    = "data.csv"
 OUTDIR      = "data_ncbi"
 BASE_LIMIT  = 0.34    # ~3 req/sec without an API key
-API_LIMIT   = 0.1     # ~10 req/sec with an API key
+API_LIMIT   = 0.06     # ~20 req/sec with an API key
 
 # pre-compile a regex that matches any control char except newline, carriage return, tab
 _CTRLS = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]')
