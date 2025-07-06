@@ -47,7 +47,7 @@ if search_term:
                             file_path = f'./data_google_patents/patents_json/{patent_id}.json'
                             if os.path.exists(file_path):
                                 with open(file_path, 'r') as f:
-                                    st.json(json.load(f))
+                                    st.json(json.load(f), expanded=False)
                             else:
                                 st.error(f"File not found: {file_path}")
                         else:
@@ -58,7 +58,7 @@ if search_term:
                         file_path = f'./data_google_patents/data_ncbi/{protein_id}.json'
                         if os.path.exists(file_path):
                             with open(file_path, 'r') as f:
-                                st.json(json.load(f))
+                                st.json(json.load(f), expanded=False)
                         else:
                             st.error(f"File not found: {file_path}")
 
