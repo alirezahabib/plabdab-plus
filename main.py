@@ -30,7 +30,7 @@ if search_term:
         for index, row in results.iterrows():
             with st.expander(f"Result: {row['ID']} (Num: {row['num']})", expanded=True):
                 st.write("### Details")
-                st.dataframe(row)
+                st.dataframe(row.astype(str))
 
                 url = row.get('url')
                 if not isinstance(url, str):
