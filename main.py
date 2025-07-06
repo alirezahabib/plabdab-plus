@@ -1,136 +1,81 @@
 import streamlit as st
-import streamlit_authenticator as stauth
-import yaml
-from yaml.loader import SafeLoader
-import mariadb
 import pandas as pd
-from datetime import date
+import re
+import json
+import os
 
-st.set_page_config(page_title="PLAbDab", page_icon="🧬")
-st.title('🧬 PLAbDab Database')
-st.info('The Patent and Literature Antibody Database')
+st.set_page_config(page_title="PLAbDab Plus", page_icon="🧬")
+st.title('🧬 PLAbDab Plus Database')
+st.info('The Extended Patent and Literature Antibody Database')
 
-# --- DATABASE CONNECTION ---
-@st.cache_resource
-def get_db_connection():
-    try:
-        conn = mariadb.connect(
-            user="root",
-            password="12341234",
-            host="127.0.0.1",
-            port=3306,
-            database="plabdab"
-        )
-        return conn
-    except mariadb.Error as e:
-        st.error(f"Error connecting to MariaDB Platform: {e}")
-        return None
+@st.cache_data
+def load_data():
+    df = pd.read_csv('./data.csv')
+    return df
 
-# --- USER AUTHENTICATION ---
-with open('config.yaml') as file:
-    config = yaml.load(file, Loader=SafeLoader)
+df = load_data()
 
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days']
-)
+search_term = st.text_input("Search by num or ID", "")
 
-authenticator.login()
+if search_term:
+    # Search in 'num' (as string) and 'ID' columns.
+    search_mask = (df['num'].astype(str).str.contains(search_term, case=False, na=False) | 
+                   df['ID'].str.contains(search_term, case=False, na=False))
+    results = df[search_mask]
 
-if st.session_state["authentication_status"] is False:
-    st.error('Username/password is incorrect')
-elif st.session_state["authentication_status"] is None:
-    st.warning('Please enter your username and password')
-elif st.session_state["authentication_status"]:
-    st.sidebar.title(f'Welcome *{st.session_state["name"]}*')
-    st.sidebar.write(f'Username: `{st.session_state["username"]}`') 
-    authenticator.logout('Logout', 'sidebar')
-    st.sidebar.markdown('---')
-    st.sidebar.subheader('Project Info')
-    st.sidebar.markdown('**Author:** Alireza Habibzadeh')
-    st.sidebar.markdown('**Supervisor:** Dr. Ali Sharifi-Zarchi')
-    st.sidebar.markdown('**Sharif University of Technology**')
-    
-
-    st.sidebar.markdown('---')
-    action = st.sidebar.selectbox('User Actions', ['None', 'Update user details', 'Reset password'])
-
-    if action == 'Update user details':
-        try:
-            if authenticator.update_user_details(st.session_state['username']):
-                st.success('Entries updated successfully')
-                # Update config file
-                with open('config.yaml', 'w') as file:
-                    yaml.dump(config, file, default_flow_style=False)
-        except Exception as e:
-            st.error(e)
-
-    elif action == 'Reset password':
-        try:
-            if authenticator.reset_password(st.session_state['username']):
-                st.success('Password modified successfully')
-                # Update config file
-                with open('config.yaml', 'w') as file:
-                    yaml.dump(config, file, default_flow_style=False)
-        except Exception as e:
-            st.error(e)
-
-
-    conn = get_db_connection()
-    if conn:
-        cursor = conn.cursor(dictionary=True)
-
-        # --- SEARCH AND FILTER UI ---
-        st.header('Search and Filter')
-        search_id = st.text_input('Search by ID')
-        
-        today = date.today()
-        default_start_date = date(2000, 1, 1)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input('Start date', value=default_start_date, min_value=date(1900, 1, 1), max_value=today)
-        with col2:
-            end_date = st.date_input('End date', value=today, min_value=start_date, max_value=today)
-
-        if st.button('Search'):
-            query = "SELECT * FROM paired_sequences WHERE 1=1"
-            params = []
-            if search_id:
-                query += " AND ID LIKE %s"
-                params.append(f"%{search_id}%")
-            if start_date and end_date:
-                query += " AND update_date BETWEEN %s AND %s"
-                params.append(start_date)
-                params.append(end_date)
-            
-            cursor.execute(query, tuple(params))
-            results = cursor.fetchall()
-            
-            if results:
-                df = pd.DataFrame(results)
-                st.session_state['search_results'] = df
-            else:
-                st.warning('No results found.')
-                st.session_state['search_results'] = pd.DataFrame() # Empty dataframe
+    if results.empty:
+        st.warning("No results found.")
     else:
-        st.error("Database connection is not available.")
+        st.success(f"Found {len(results)} result(s).")
+        for index, row in results.iterrows():
+            with st.expander(f"Result: {row['ID']} (Num: {row['num']})", expanded=True):
+                st.write("### Details")
+                st.dataframe(row.to_frame().T)
 
+                url = row.get('url')
+                if not isinstance(url, str):
+                    st.write("No associated URL or URL is not a string.")
+                    continue
 
-    # --- DISPLAY RESULTS ---
-    if 'search_results' in st.session_state and not st.session_state.search_results.empty:
-        st.header('Search Results')
-        df_results = st.session_state.search_results
-        st.dataframe(df_results[['ID', 'organism', 'update_date', 'pairing', 'targets_mentioned']])
+                st.write("### Associated Data")
 
-        # --- EXPANDED VIEW ---
-        st.header('Detailed Information')
-        selected_id = st.selectbox('Select an ID to see full details', options=df_results['ID'].tolist())
+                try:
+                    if 'patents.google.com' in url:
+                        match = re.search(r'patent/([^/]+)', url)
+                        if match:
+                            patent_id = match.group(1)
+                            file_path = f'./data_google_patents/patents_json/{patent_id}.json'
+                            if os.path.exists(file_path):
+                                with open(file_path, 'r') as f:
+                                    st.json(json.load(f))
+                            else:
+                                st.error(f"File not found: {file_path}")
+                        else:
+                            st.warning("Could not extract patent ID from URL.")
 
-        if selected_id:
-            selected_item = df_results[df_results['ID'] == selected_id].iloc[0]
-            with st.expander(f"Details for {selected_id}", expanded=True):
-                for col, value in selected_item.items():
-                    st.write(f"**{col.replace('_', ' ').title()}:** {value}")
+                    elif 'www.ncbi.nlm.nih.gov/protein/' in url:
+                        protein_id = url.split('/')[-1]
+                        file_path = f'./data_google_patents/data_ncbi/{protein_id}.json'
+                        if os.path.exists(file_path):
+                            with open(file_path, 'r') as f:
+                                st.json(json.load(f))
+                        else:
+                            st.error(f"File not found: {file_path}")
+
+                    elif 'sabdab/structureviewer' in url:
+                        match = re.search(r'pdb=([^&]+)', url)
+                        if match:
+                            pdb_id = match.group(1)
+                            file_path = f'./data_google_patents/data_sabdab/{pdb_id}.tsv'
+                            if os.path.exists(file_path):
+                                sabdab_df = pd.read_csv(file_path, sep='\\t', engine='python')
+                                st.dataframe(sabdab_df)
+                            else:
+                                st.error(f"File not found: {file_path}")
+                        else:
+                            st.warning("Could not extract PDB ID from URL.")
+                    else:
+                        st.info("URL does not match known patterns for additional data.")
+
+                except Exception as e:
+                    st.error(f"An error occurred while trying to display associated data: {e}")
