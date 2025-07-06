@@ -2,3 +2,5 @@ streamlit
 mariadb
 streamlit-authenticator
 pyyaml
+pandas
+matplotlib

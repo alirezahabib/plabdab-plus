@@ -1,28 +1,31 @@
-import csv
+import pandas as pd
 import os
 import re
 
-csv_path = 'data.csv'
-url_prefix = 'https://www.ncbi.nlm.nih.gov/protein/'
-url_prefix_google_patents = 'https://patents.google.com'
+# Load the CSV file
+df = pd.read_csv('data.csv')
+
+# Directory containing downloaded patent HTML files
+patents_dir = './data_google_patents/patents/'
+
+# Get set of already downloaded patent IDs (without .html extension)
+if os.path.isdir(patents_dir):
+    downloaded_patent_ids = {os.path.splitext(fname)[0] for fname in os.listdir(patents_dir) if fname.endswith('.html')}
+else:
+    downloaded_patent_ids = set()
+
+# Regex to extract patent id from Google Patents URL
+patent_url_re = re.compile(r'^https://patents\.google\.com/patent/([^/]+)/')
+
 unique_urls = set()
-missing_patent_files_count = 0
-patent_id_pattern = re.compile(r'https://patents\.google\.com/patent/([^/]+)/?')
 
-with open(csv_path, newline='', encoding='utf-8') as csvfile:
-    reader = csv.DictReader(csvfile)
-    for row in reader:
-        url = row.get('url', '')
-        if url.startswith(url_prefix):
+for url in df['url'].dropna().unique():
+    match = patent_url_re.match(url)
+    if match:
+        patent_id = match.group(1)
+        if patent_id not in downloaded_patent_ids:
             unique_urls.add(url)
-        # For Google Patents URLs, check for missing HTML file
-        if url.startswith(url_prefix_google_patents):
-            match = patent_id_pattern.match(url)
-            if match:
-                patent_id = match.group(1)
-                html_path = f'./data_google_patents/patents/{patent_id}.html'
-                if not os.path.isfile(html_path):
-                    missing_patent_files_count += 1
 
-print(f"Number of unique URLs starting with '{url_prefix}': {len(unique_urls)}")
-print(f"Number of rows with url starting with '{url_prefix_google_patents}' and missing patent HTML file: {missing_patent_files_count}")
+# Print the unique URLs
+for url in sorted(unique_urls):
+    print(url)
