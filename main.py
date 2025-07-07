@@ -79,3 +79,15 @@ if search_term:
 
                 except Exception as e:
                     st.error(f"An error occurred while trying to display associated data: {e}")
+
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center;'>
+        Alireza Habibzadeh 2025<br>
+        Supervisor: Dr. Ali Sharifi-Zarchi<br>
+        Sharif University of Technology
+    </div>
+    """,
+    unsafe_allow_html=True
+)
