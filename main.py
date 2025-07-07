@@ -83,7 +83,7 @@ if search_term:
 st.markdown("---")
 st.markdown(
     """
-    <div style='text-align: center;'>
+    <div style='text-align: center; color: grey; font-size: 12px;'>
         Alireza Habibzadeh 2025<br>
         Supervisor: Dr. Ali Sharifi-Zarchi<br>
         Sharif University of Technology
