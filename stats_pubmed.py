@@ -22,7 +22,7 @@ def count_missing_pubmed(directory):
     return total, missing_pubmed
 
 if __name__ == "__main__":
-    directory = './data_ncbi'
+    directory = './data_google_patents/data_ncbi'
     total, missing = count_missing_pubmed(directory)
     print(f"Total JSON files: {total}")
     print(f"Files missing 'pubmed' key: {missing}")
