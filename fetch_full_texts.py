@@ -139,8 +139,8 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Fetch full-text for PubMed records present in data_ncbi json files.")
     p.add_argument("--email", required=True, help="NCBI requires an email address for Entrez usage.")
     p.add_argument("--api_key", help="NCBI API key (optional). Increases rate limit.")
-    p.add_argument("--indir", default="data_ncbi", help="Directory containing json files from crawl.py")
-    p.add_argument("--outdir", default="full_texts", help="Directory to place fetched full-texts")
+    p.add_argument("--indir", default="data_google_patents/data_ncbi", help="Directory containing json files from crawl.py")
+    p.add_argument("--outdir", default="data_google_patents/full_texts", help="Directory to place fetched full-texts")
 
     args = p.parse_args()
 
